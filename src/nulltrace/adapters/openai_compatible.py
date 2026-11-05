@@ -1,4 +1,4 @@
-
+import ipaddress
 import os
 from urllib.parse import urlsplit
 
@@ -13,37 +13,83 @@ DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 class AdapterError(RuntimeError):
     """Raised when an AI target adapter cannot complete a request."""
 
-
 def validate_base_url(base_url: str) -> str:
     """Validate an OpenAI-compatible API base URL."""
 
-    if not base_url.strip():
+    if not base_url or not base_url.strip():
         raise ValueError("Base URL cannot be empty.")
 
-    parsed = urlsplit(base_url)
+    if any(ord(char) < 32 or ord(char) == 127 for char in base_url):
+        raise ValueError("Base URL contains invalid control characters.")
+
+    if base_url != base_url.strip():
+        raise ValueError("Base URL must not contain surrounding whitespace.")
+
+    try:
+        parsed = urlsplit(base_url)
+        hostname = parsed.hostname
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("Base URL is malformed.") from exc
 
     if parsed.scheme not in {"https", "http"}:
         raise ValueError("Base URL must use HTTPS.")
 
-    if not parsed.hostname:
+    if not hostname:
         raise ValueError("Base URL must contain a valid hostname.")
 
-    if parsed.username or parsed.password:
+    if parsed.username is not None or parsed.password is not None:
         raise ValueError("Credentials must not be embedded in the base URL.")
 
-    if parsed.query or parsed.fragment:
+    if parsed.query or parsed.fragment or "?" in base_url or "#" in base_url:
         raise ValueError("Base URL must not contain a query or fragment.")
 
-    hostname = parsed.hostname.lower()
+    if port == 0:
+        raise ValueError("Port must be between 1 and 65535.")
+
+    hostname = hostname.lower().rstrip(".")
+
     local_hosts = {"localhost", "127.0.0.1", "::1"}
 
-    if parsed.scheme == "http" and hostname not in local_hosts:
+    local_suffixes = (
+        ".localhost",
+        ".local",
+        ".internal",
+        ".lan",
+        ".home.arpa",
+    )
+
+    is_local_hostname = (
+        hostname == "localhost"
+        or any(hostname.endswith(suffix) for suffix in local_suffixes)
+    )
+
+    # Explicitly allow HTTP only for localhost endpoints.
+    if parsed.scheme == "http":
+        if hostname not in local_hosts:
+            raise ValueError(
+                "HTTP is only permitted for explicit localhost endpoints. "
+                "Use HTTPS for remote APIs."
+            )
+
+        return base_url.rstrip("/")
+
+    # Remote endpoints must use HTTPS and must not resolve to
+    # a literal non-global IP address.
+    if is_local_hostname:
+        raise ValueError("Local hostnames are not permitted for remote API endpoints.")
+
+    try:
+        ip_address = ipaddress.ip_address(hostname)
+    except ValueError:
+        ip_address = None
+
+    if ip_address is not None and not ip_address.is_global:
         raise ValueError(
-            "HTTP is only permitted for localhost. Use HTTPS for remote APIs."
+            "Private, local, or reserved IP addresses are not permitted."
         )
 
     return base_url.rstrip("/")
-
 
 class OpenAICompatibleAdapter(TargetAdapter):
     """Adapter for APIs implementing the OpenAI chat completions format."""
