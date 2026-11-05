@@ -1,0 +1,24 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+dist/
+build/
+reports/
+.DS_Store
+
+# Secrets and private credentials
+.envrc
+.secrets/
+secrets/
+*.pem
+*.key
+*_credentials.json
