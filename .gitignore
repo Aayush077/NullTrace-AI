@@ -1,24 +1,47 @@
+# ---- Python ----
 __pycache__/
 *.py[cod]
 *.egg-info/
+.coverage
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-.coverage
 .venv/
 venv/
+build/
+dist/
+
+# ---- Environment & secrets (never commit real credentials) ----
 .env
 .env.*
 !.env.example
-dist/
-build/
-reports/
-.DS_Store
-
-# Secrets and private credentials
 .envrc
 .secrets/
 secrets/
 *.pem
 *.key
 *_credentials.json
+
+# ---- Web platform runtime data (user/assessment data) ----
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# ---- Generated assessment reports and evidence ----
+reports/
+
+# ---- Academic / submission artifacts (contain personal data) ----
+# The university project report folder holds group members' names and
+# roll numbers plus generated DOCX/PDF. Keep it local; do not publish.
+report/
+
+# ---- Frontend ----
+frontend/node_modules/
+frontend/dist/
+
+# ---- OS / editor ----
+.DS_Store
+*.swp
+.idea/
+.vscode/

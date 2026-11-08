@@ -1,10 +1,10 @@
-from abc import ABC, abstractmethod
+"""Backwards-compatible re-export.
 
+The capability interfaces moved to :mod:`nulltrace.adapters.capabilities`
+when conversation and retrieval capabilities were added.  Import from there
+in new code.
+"""
 
-class ToolExecutionCapability(ABC):
-    """Interface for targets that expose tool execution for assessment."""
+from nulltrace.adapters.capabilities import ToolExecutionCapability
 
-    @abstractmethod
-    def execute_tool(self, tool: str, role: str) -> str:
-        """Execute a synthetic or authorized tool operation."""
-        raise NotImplementedError
+__all__ = ["ToolExecutionCapability"]

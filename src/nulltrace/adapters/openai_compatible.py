@@ -1,17 +1,43 @@
+"""Adapter for OpenAI-compatible chat completion APIs.
+
+Supports single prompts, multi-turn conversations, and tool-call probing
+(presenting synthetic tool definitions and parsing which calls the model
+*attempted* — attempts are evidence, they are never executed).
+
+Streaming and structured-output modes are not implemented; responses are
+read fully, size-limited, and parsed defensively.
+"""
+
 import ipaddress
+import json
 import os
+from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
 
 from nulltrace.adapters.base import TargetAdapter
-from nulltrace.core.budget import RequestBudget
+from nulltrace.adapters.capabilities import (
+    ConversationCapability,
+    ToolCallAttempt,
+    ToolCallProbeCapability,
+    ToolCallProbeResult,
+)
+from nulltrace.adapters.secure_transport import (
+    DNSResolutionError,
+    PinnedHTTPTransport,
+    resolve_endpoint_addresses,
+)
+from nulltrace.core.budget import RequestBudget, RequestBudgetExceeded
 
 DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+
+_VALID_ROLES = {"system", "user", "assistant"}
 
 
 class AdapterError(RuntimeError):
     """Raised when an AI target adapter cannot complete a request."""
+
 
 def validate_base_url(base_url: str) -> str:
     """Validate an OpenAI-compatible API base URL."""
@@ -64,7 +90,6 @@ def validate_base_url(base_url: str) -> str:
         or any(hostname.endswith(suffix) for suffix in local_suffixes)
     )
 
-    # Explicitly allow HTTP only for localhost endpoints.
     if parsed.scheme == "http":
         if hostname not in local_hosts:
             raise ValueError(
@@ -74,24 +99,46 @@ def validate_base_url(base_url: str) -> str:
 
         return base_url.rstrip("/")
 
-    # Remote endpoints must use HTTPS and must not resolve to
-    # a literal non-global IP address.
     if is_local_hostname:
-        raise ValueError("Local hostnames are not permitted for remote API endpoints.")
+        raise ValueError(
+            "Local hostnames are not permitted for remote API endpoints."
+        )
 
     try:
         ip_address = ipaddress.ip_address(hostname)
     except ValueError:
         ip_address = None
 
-    if ip_address is not None and not ip_address.is_global:
+    if ip_address is not None and (
+        not ip_address.is_global or ip_address.is_multicast
+    ):
         raise ValueError(
             "Private, local, or reserved IP addresses are not permitted."
         )
 
     return base_url.rstrip("/")
 
-class OpenAICompatibleAdapter(TargetAdapter):
+
+def _validate_messages(messages: list[dict[str, str]]) -> None:
+    if not messages:
+        raise ValueError("Conversation cannot be empty.")
+
+    for message in messages:
+        role = message.get("role")
+        content = message.get("content")
+
+        if role not in _VALID_ROLES:
+            raise ValueError(f"Invalid message role: {role!r}.")
+
+        if not isinstance(content, str):
+            raise ValueError("Message content must be a string.")
+
+
+class OpenAICompatibleAdapter(
+    TargetAdapter,
+    ConversationCapability,
+    ToolCallProbeCapability,
+):
     """Adapter for APIs implementing the OpenAI chat completions format."""
 
     def __init__(
@@ -102,6 +149,7 @@ class OpenAICompatibleAdapter(TargetAdapter):
         timeout: float = 30.0,
         max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES,
         request_budget: RequestBudget | None = None,
+        transport: httpx.BaseTransport | None = None,
     ) -> None:
         if not model.strip():
             raise ValueError("Model name cannot be empty.")
@@ -118,14 +166,143 @@ class OpenAICompatibleAdapter(TargetAdapter):
         self.timeout = timeout
         self.max_response_bytes = max_response_bytes
         self.request_budget = request_budget
+        self.transport = transport
 
     @property
     def target_name(self) -> str:
         return f"openai-compatible:{self.model}"
 
+    # ------------------------------------------------------------------
+    # Public interface
+    # ------------------------------------------------------------------
+
     def send_prompt(self, prompt: str) -> str:
+        """Send a text prompt and return the API's text response."""
+
         if not prompt.strip():
             raise ValueError("Prompt cannot be empty.")
+
+        return self.send_conversation([{"role": "user", "content": prompt}])
+
+    def send_conversation(self, messages: list[dict[str, str]]) -> str:
+        """Send a multi-turn conversation and return the final reply text."""
+
+        _validate_messages(messages)
+
+        data = self._execute({"model": self.model, "messages": messages})
+        message = self._first_message(data)
+        content = message.get("content")
+
+        if not isinstance(content, str):
+            raise AdapterError("The AI API returned a non-text response.")
+
+        return content
+
+    def request_with_tools(
+        self,
+        messages: list[dict[str, str]],
+        tools: list[dict[str, object]],
+    ) -> ToolCallProbeResult:
+        """Present tool definitions and parse attempted tool calls.
+
+        Attempted calls are returned as structured evidence; nothing is
+        ever executed by the framework.
+        """
+
+        _validate_messages(messages)
+
+        if not tools:
+            raise ValueError("At least one tool definition is required.")
+
+        data = self._execute(
+            {"model": self.model, "messages": messages, "tools": tools}
+        )
+        message = self._first_message(data)
+
+        content = message.get("content")
+        text = content if isinstance(content, str) else ""
+
+        raw_calls = message.get("tool_calls")
+        attempts: list[ToolCallAttempt] = []
+
+        if raw_calls is not None:
+            if not isinstance(raw_calls, list):
+                raise AdapterError(
+                    "The AI API returned an unexpected response format."
+                )
+
+            for raw_call in raw_calls:
+                try:
+                    function = raw_call["function"]
+                    name = function["name"]
+                    arguments = function.get("arguments", "{}")
+                except (TypeError, KeyError) as exc:
+                    raise AdapterError(
+                        "The AI API returned an unexpected response format."
+                    ) from exc
+
+                if not isinstance(name, str) or not isinstance(arguments, str):
+                    raise AdapterError(
+                        "The AI API returned an unexpected response format."
+                    )
+
+                attempts.append(
+                    ToolCallAttempt(name=name, arguments_json=arguments)
+                )
+
+        return ToolCallProbeResult(text=text, tool_calls=tuple(attempts))
+
+    # ------------------------------------------------------------------
+    # Request execution
+    # ------------------------------------------------------------------
+
+    def _create_transport(self) -> httpx.BaseTransport:
+        """Create a fresh pinned transport for a network request."""
+
+        parsed = urlsplit(self.base_url)
+        hostname = parsed.hostname
+
+        if hostname is None:
+            raise AdapterError("The configured API hostname is invalid.")
+
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+
+        try:
+            addresses, allow_loopback = resolve_endpoint_addresses(
+                parsed.scheme,
+                hostname,
+                port,
+            )
+        except DNSResolutionError as exc:
+            raise AdapterError(
+                "The API hostname failed DNS or endpoint security validation."
+            ) from exc
+
+        return PinnedHTTPTransport(
+            addresses,
+            expected_host=hostname,
+            expected_port=port,
+            allow_loopback=allow_loopback,
+        )
+
+    @staticmethod
+    def _first_message(data: Any) -> dict[str, Any]:
+        try:
+            message = data["choices"][0]["message"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise AdapterError(
+                "The AI API returned an unexpected response format."
+            ) from exc
+
+        if not isinstance(message, dict):
+            raise AdapterError(
+                "The AI API returned an unexpected response format."
+            )
+
+        return message
+
+    def _execute(self, payload: dict[str, Any]) -> Any:
+        """Send one bounded, budgeted request and return parsed JSON."""
 
         api_key = os.getenv(self.api_key_env)
 
@@ -134,16 +311,18 @@ class OpenAICompatibleAdapter(TargetAdapter):
                 f"API key environment variable '{self.api_key_env}' is not set."
             )
 
+        # Avoid DNS resolution when the request budget is already exhausted.
+        if (
+            self.request_budget is not None
+            and self.request_budget.remaining <= 0
+        ):
+            raise AdapterError("Assessment request budget exhausted.")
+
         url = f"{self.base_url}/chat/completions"
 
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
-        }
-
-        payload = {
-            "model": self.model,
-            "messages": [{"role": "user", "content": prompt}],
         }
 
         timeout = httpx.Timeout(
@@ -153,16 +332,26 @@ class OpenAICompatibleAdapter(TargetAdapter):
             pool=self.timeout,
         )
 
+        active_transport = self.transport
+        owns_transport = active_transport is None
+
         try:
+            if active_transport is None:
+                active_transport = self._create_transport()
+
             with httpx.Client(
+                transport=active_transport,
                 timeout=timeout,
                 follow_redirects=False,
                 trust_env=False,
             ) as client:
-
-                # Consume budget immediately before the outbound request.
                 if self.request_budget is not None:
-                    self.request_budget.consume()
+                    try:
+                        self.request_budget.consume()
+                    except RequestBudgetExceeded as exc:
+                        raise AdapterError(
+                            "Assessment request budget exhausted."
+                        ) from exc
 
                 with client.stream(
                     "POST",
@@ -172,7 +361,8 @@ class OpenAICompatibleAdapter(TargetAdapter):
                 ) as response:
                     if response.is_redirect:
                         raise AdapterError(
-                            "The AI API returned a redirect. Redirects are not permitted."
+                            "The AI API returned a redirect. "
+                            "Redirects are not permitted."
                         )
 
                     response.raise_for_status()
@@ -206,22 +396,11 @@ class OpenAICompatibleAdapter(TargetAdapter):
                         body.extend(chunk)
 
             try:
-                data = httpx.Response(
-                    status_code=200,
-                    content=bytes(body),
-                ).json()
-
-                content = data["choices"][0]["message"]["content"]
-
-            except (ValueError, KeyError, IndexError, TypeError) as exc:
+                return json.loads(bytes(body))
+            except ValueError as exc:
                 raise AdapterError(
                     "The AI API returned an unexpected response format."
                 ) from exc
-
-            if not isinstance(content, str):
-                raise AdapterError("The AI API returned a non-text response.")
-
-            return content
 
         except AdapterError:
             raise
@@ -240,3 +419,6 @@ class OpenAICompatibleAdapter(TargetAdapter):
                 "Unable to connect to the configured AI API endpoint."
             ) from exc
 
+        finally:
+            if owns_transport and active_transport is not None:
+                active_transport.close()

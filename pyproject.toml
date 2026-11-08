@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nulltrace-ai"
-version = "0.1.0"
+version = "0.5.0"
 description = "Evidence-first security assessment framework for LLM applications and AI agents"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,11 +12,24 @@ license = {file = "LICENSE"}
 dependencies = [
     "typer>=0.12,<1.0",
     "rich>=13.7,<15.0",
-    "httpx>=0.27,<1.0",
+    "httpx>=0.28.1,<0.29",
+    "httpcore>=1.0.9,<1.1",
+    "idna>=3.4,<4",
+    # The web dashboard (FastAPI backend + ASGI server) is a first-class
+    # feature, so these are runtime dependencies rather than optional
+    # extras. Keeping them required means `uv sync` / `uv run` always
+    # provide them, so the server starts without falling back to a global
+    # uvicorn on PATH.
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.30,<1",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<9", "ruff>=0.5,<1", "mypy>=1.10,<2"]
+dev = [
+    "pytest>=8,<9",
+    "ruff>=0.5,<1",
+    "mypy>=1.10,<2",
+]
 
 [project.scripts]
 nulltrace = "nulltrace.cli.app:app"

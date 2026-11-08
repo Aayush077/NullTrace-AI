@@ -1,0 +1,92 @@
+@import "@fontsource-variable/inter";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-ink-950 text-tx-1 font-sans antialiased;
+}
+
+::selection {
+  background: rgba(124, 93, 250, 0.35);
+}
+
+/* Thin scrollbars that match the theme */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 150, 200, 0.25) transparent;
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-line bg-ink-850/80 shadow-card;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2
+      text-sm font-medium transition-colors focus-visible:outline
+      focus-visible:outline-2 focus-visible:outline-violet-400
+      disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-primary {
+    @apply btn text-white;
+    background: linear-gradient(135deg, #6947e8 0%, #7c5dfa 55%, #9f7bff 100%);
+  }
+
+  .btn-primary:hover {
+    filter: brightness(1.1);
+  }
+
+  .btn-ghost {
+    @apply btn border border-line-strong bg-transparent text-tx-1 hover:bg-ink-700;
+  }
+
+  .btn-danger {
+    @apply btn border border-red-500/40 bg-red-500/10 text-red-300 hover:bg-red-500/20;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-line bg-ink-900 px-3 py-2 text-sm
+      text-tx-1 placeholder-tx-3 focus:border-violet-500/60 focus:outline-none;
+  }
+
+  .label {
+    @apply mb-1.5 block text-xs font-medium uppercase tracking-wider text-tx-3;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5
+      font-mono text-[11px] leading-5;
+  }
+}
+
+.hero-grid {
+  background-image:
+    linear-gradient(rgba(148, 150, 200, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 150, 200, 0.05) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 35%, transparent 75%);
+}
+
+.hero-glow {
+  background: radial-gradient(
+    ellipse 55% 45% at 50% 0%,
+    rgba(124, 93, 250, 0.28),
+    rgba(45, 212, 191, 0.06) 55%,
+    transparent 75%
+  );
+}
