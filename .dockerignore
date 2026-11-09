@@ -12,3 +12,12 @@ reports/*.md
 tests
 docs
 *.egg-info
+
+# Large local-only artifacts (not needed in the image; keeps build context small).
+# NOTE: frontend source + frontend/package-lock.json are intentionally NOT excluded,
+# so the multi-stage build can install deps and run the production Vite build.
+presentation
+report
+examples
+*.md
+!README.md
