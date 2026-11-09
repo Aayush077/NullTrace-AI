@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
@@ -10,17 +11,19 @@ import {
   FileText,
   GitBranch,
   Lock,
+  Menu,
   ScrollText,
   ShieldAlert,
   ShieldCheck,
   Terminal,
   Workflow,
+  X,
 } from "lucide-react";
 import { Logo } from "../components/Logo";
 
-// Set to your repository URL when the project is published; the link is
-// hidden while null so we never ship a fabricated destination.
-const GITHUB_URL: string | null = null;
+// Public repository for the project. Set to null to hide the GitHub links
+// (we never ship a fabricated destination).
+const GITHUB_URL: string | null = "https://github.com/CyberGuard-Anil/NullTrace-AI";
 
 const NAV_LINKS = [
   { label: "Product", href: "#product" },
@@ -207,7 +210,7 @@ function SectionHeading({
 
 function HeroPreview() {
   return (
-    <div className="card mx-auto mt-16 max-w-4xl overflow-hidden text-left shadow-glow">
+    <div className="card mx-auto mt-16 max-w-5xl overflow-hidden text-left shadow-glow">
       <div className="flex items-center gap-2 border-b border-line bg-ink-900 px-4 py-3">
         <span className="h-2.5 w-2.5 rounded-full bg-red-400/70" />
         <span className="h-2.5 w-2.5 rounded-full bg-amber-400/70" />
@@ -242,45 +245,84 @@ function HeroPreview() {
 }
 
 export function Landing() {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = () => setMenuOpen(false);
+
   return (
     <div className="min-h-full bg-ink-950">
       {/* Navigation */}
       <header className="sticky top-0 z-40 border-b border-line bg-ink-950/80 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+        <div className="shell flex h-16 items-center justify-between">
           <Logo />
-          <nav className="hidden items-center gap-6 md:flex">
-            {NAV_LINKS.map((link) =>
-              link.href.startsWith("#") ? (
-                <a key={link.label} href={link.href} className="text-sm text-tx-2 hover:text-tx-1">
-                  {link.label}
-                </a>
-              ) : (
-                <a key={link.label} href={link.href} className="text-sm text-tx-2 hover:text-tx-1">
-                  {link.label}
-                </a>
-              ),
-            )}
+          <nav className="hidden items-center gap-7 md:flex lg:gap-8">
+            {NAV_LINKS.map((link) => (
+              <a key={link.label} href={link.href} className="text-sm text-tx-2 transition-colors hover:text-tx-1">
+                {link.label}
+              </a>
+            ))}
             {GITHUB_URL ? (
-              <a href={GITHUB_URL} className="text-sm text-tx-2 hover:text-tx-1">
+              <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="text-sm text-tx-2 transition-colors hover:text-tx-1">
                 GitHub
               </a>
             ) : null}
           </nav>
-          <Link to="/app" className="btn-primary">
-            Launch Dashboard
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link to="/app" className="btn-primary hidden md:inline-flex">
+              Launch Dashboard
+            </Link>
+            <button
+              type="button"
+              className="btn-ghost p-2 md:hidden"
+              aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
+              aria-expanded={menuOpen}
+              aria-controls="mobile-nav"
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              {menuOpen ? <X className="h-5 w-5" aria-hidden /> : <Menu className="h-5 w-5" aria-hidden />}
+            </button>
+          </div>
         </div>
+        {menuOpen ? (
+          <div id="mobile-nav" className="border-t border-line bg-ink-950/95 backdrop-blur md:hidden">
+            <nav className="shell flex flex-col gap-1 py-3">
+              {NAV_LINKS.map((link) => (
+                <a
+                  key={link.label}
+                  href={link.href}
+                  onClick={closeMenu}
+                  className="rounded-lg px-3 py-2.5 text-sm text-tx-2 hover:bg-ink-700 hover:text-tx-1"
+                >
+                  {link.label}
+                </a>
+              ))}
+              {GITHUB_URL ? (
+                <a
+                  href={GITHUB_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={closeMenu}
+                  className="rounded-lg px-3 py-2.5 text-sm text-tx-2 hover:bg-ink-700 hover:text-tx-1"
+                >
+                  GitHub
+                </a>
+              ) : null}
+              <Link to="/app" onClick={closeMenu} className="btn-primary mt-2 w-full">
+                Launch Dashboard
+              </Link>
+            </nav>
+          </div>
+        ) : null}
       </header>
 
       {/* Hero */}
       <section id="product" className="relative overflow-hidden">
         <div className="hero-glow absolute inset-0" aria-hidden />
         <div className="hero-grid absolute inset-0" aria-hidden />
-        <div className="relative mx-auto max-w-6xl px-4 pb-24 pt-20 text-center sm:px-6 sm:pt-28">
+        <div className="relative shell pb-24 pt-20 text-center sm:pt-28 lg:pt-32">
           <p className="chip mx-auto border-violet-500/40 bg-violet-500/10 text-violet-300">
             v0.5.0 · evidence-first · local-first
           </p>
-          <h1 className="mx-auto mt-6 max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-6xl">
+          <h1 className="mx-auto mt-6 max-w-4xl text-4xl font-semibold leading-[1.1] tracking-tight sm:text-6xl">
             Secure the Intelligence{" "}
             <span className="bg-gradient-to-r from-violet-400 via-violet-300 to-mint-300 bg-clip-text text-transparent">
               Behind Your Applications
@@ -309,7 +351,7 @@ export function Landing() {
       </section>
 
       {/* Features */}
-      <section id="features" className="mx-auto max-w-6xl px-4 py-24 sm:px-6">
+      <section id="features" className="shell py-24">
         <SectionHeading
           eyebrow="Capabilities"
           title="Built for real AI security assessment"
@@ -319,7 +361,7 @@ export function Landing() {
           {FEATURES.map(({ icon: Icon, title, text }) => (
             <div key={title} className="card p-5">
               <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-violet-500/30 bg-violet-500/10">
-                <Icon className="h-4.5 w-4.5 h-[18px] w-[18px] text-violet-300" aria-hidden />
+                <Icon className="h-[18px] w-[18px] text-violet-300" aria-hidden />
               </span>
               <h3 className="mt-4 text-sm font-semibold">{title}</h3>
               <p className="mt-1.5 text-xs leading-relaxed text-tx-3">{text}</p>
@@ -330,7 +372,7 @@ export function Landing() {
 
       {/* Architecture */}
       <section className="border-y border-line bg-ink-900/40">
-        <div className="mx-auto max-w-6xl px-4 py-24 sm:px-6">
+        <div className="shell py-24">
           <SectionHeading
             eyebrow="Architecture"
             title="From target to validated finding"
@@ -361,7 +403,7 @@ export function Landing() {
       </section>
 
       {/* Modules */}
-      <section id="modules" className="mx-auto max-w-6xl px-4 py-24 sm:px-6">
+      <section id="modules" className="shell py-24">
         <SectionHeading
           eyebrow="Security Modules"
           title="Nine modules, honest statuses"
@@ -385,7 +427,7 @@ export function Landing() {
 
       {/* How it works */}
       <section className="border-y border-line bg-ink-900/40">
-        <div className="mx-auto max-w-6xl px-4 py-24 sm:px-6">
+        <div className="shell py-24">
           <SectionHeading eyebrow="Workflow" title="How an assessment runs" />
           <ol className="mx-auto mt-12 grid max-w-4xl gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {STEPS.map((step, index) => (
@@ -402,7 +444,7 @@ export function Landing() {
       </section>
 
       {/* Reporting */}
-      <section className="mx-auto max-w-6xl px-4 py-24 sm:px-6">
+      <section className="shell py-24">
         <div className="grid items-center gap-10 lg:grid-cols-2">
           <div>
             <p className="chip border-violet-500/40 bg-violet-500/10 text-violet-300">
@@ -446,7 +488,7 @@ export function Landing() {
 
       {/* Responsible testing */}
       <section className="border-y border-line bg-ink-900/40">
-        <div className="mx-auto max-w-6xl px-4 py-24 sm:px-6">
+        <div className="shell py-24">
           <SectionHeading
             eyebrow="Responsible Testing"
             title="Safe by default, by design"
@@ -509,7 +551,7 @@ export function Landing() {
 
       {/* Footer */}
       <footer className="border-t border-line bg-ink-900/60">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 px-4 py-10 sm:px-6 md:flex-row">
+        <div className="shell flex flex-col items-center justify-between gap-6 py-10 md:flex-row">
           <div>
             <Logo />
             <p className="mt-2 max-w-xs text-xs leading-relaxed text-tx-3">

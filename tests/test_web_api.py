@@ -252,6 +252,65 @@ def test_token_auth_when_configured(
     assert client.get("/api/health").status_code == 200
 
 
+def test_bootstrap_admin_creates_first_admin_from_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("NULLTRACE_BOOTSTRAP_ADMIN_USERNAME", "root")
+    monkeypatch.setenv("NULLTRACE_BOOTSTRAP_ADMIN_PASSWORD", "supersecret1")
+    client = TestClient(create_app(db_path=tmp_path / "boot.db"))
+
+    # Setup mode is closed at startup; no implicit-admin window remains.
+    status = client.get("/api/auth/status").json()
+    assert status["setup_mode"] is False
+
+    # The bootstrapped admin can log in with the provided credentials.
+    login = client.post(
+        "/api/auth/login",
+        json={"username": "root", "password": "supersecret1"},
+    )
+    assert login.status_code == 200
+    assert login.json()["role"] == "admin"
+
+
+def test_bootstrap_admin_noop_without_env(tmp_path: Path) -> None:
+    # No bootstrap env vars -> behavior is unchanged (open setup mode).
+    client = TestClient(create_app(db_path=tmp_path / "nobob.db"))
+    assert client.get("/api/auth/status").json()["setup_mode"] is True
+
+
+def test_bootstrap_admin_does_not_overwrite_existing_users(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = tmp_path / "existing.db"
+    # Seed an existing admin the normal way.
+    first = TestClient(create_app(db_path=db))
+    first.post(
+        "/api/users",
+        json={"username": "owner", "password": "ownerpass1", "role": "admin"},
+    )
+
+    # A later start with bootstrap env vars must NOT create or overwrite.
+    monkeypatch.setenv("NULLTRACE_BOOTSTRAP_ADMIN_USERNAME", "root")
+    monkeypatch.setenv("NULLTRACE_BOOTSTRAP_ADMIN_PASSWORD", "supersecret1")
+    second = TestClient(create_app(db_path=db))
+
+    # The original user still works; the bootstrap identity was never added.
+    assert (
+        second.post(
+            "/api/auth/login",
+            json={"username": "owner", "password": "ownerpass1"},
+        ).status_code
+        == 200
+    )
+    assert (
+        second.post(
+            "/api/auth/login",
+            json={"username": "root", "password": "supersecret1"},
+        ).status_code
+        == 401
+    )
+
+
 # ---------------------------------------------------------------------------
 # Assessment history deletion
 # ---------------------------------------------------------------------------

@@ -15,6 +15,7 @@ Security posture:
   see docs/SECURITY_REVIEW.md for the pending external review.
 """
 
+import logging
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -91,10 +92,46 @@ class FindingReview(BaseModel):
     note: str = Field(default="", max_length=2000)
 
 
+_logger = logging.getLogger("nulltrace.web")
+
+
+def _maybe_bootstrap_admin(service: AssessmentService) -> None:
+    """Optionally create the first admin from environment secrets.
+
+    Opt-in and non-destructive. Runs only when BOTH
+    ``NULLTRACE_BOOTSTRAP_ADMIN_USERNAME`` and
+    ``NULLTRACE_BOOTSTRAP_ADMIN_PASSWORD`` are set AND no users exist yet.
+    This closes the open "setup mode" window at startup on platforms where
+    an interactive shell (for ``nulltrace user-add``) is unavailable. It
+    never overwrites an existing user, never exposes an endpoint, and —
+    when the variables are unset — leaves behavior exactly as before. The
+    password is read from a backend environment variable only and is never
+    logged.
+    """
+
+    username = os.getenv("NULLTRACE_BOOTSTRAP_ADMIN_USERNAME", "").strip()
+    password = os.getenv("NULLTRACE_BOOTSTRAP_ADMIN_PASSWORD", "")
+    if not username or not password:
+        return
+    if not service.setup_mode():
+        # Users already exist; never overwrite or reset them.
+        return
+    try:
+        service.create_user(username, password, "admin")
+    except ServiceError as exc:
+        _logger.error("First-admin bootstrap skipped: %s", exc)
+        return
+    _logger.info(
+        "Bootstrapped first admin '%s' from environment; setup mode closed.",
+        username,
+    )
+
+
 def create_app(db_path: Path | None = None) -> FastAPI:
     service = AssessmentService(
         db_path or Path(os.getenv("NULLTRACE_DB_PATH", str(DEFAULT_DB_PATH)))
     )
+    _maybe_bootstrap_admin(service)
 
     app = FastAPI(
         title="NullTrace AI",
