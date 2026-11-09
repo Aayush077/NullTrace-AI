@@ -130,6 +130,13 @@ const MODULES: {
     text: "Includes injected tool-call detection via OpenAI-format function calling.",
   },
   {
+    name: "attack_chains",
+    checks: 2,
+    status: "Multi-turn (synthetic)",
+    statusTone: "text-amber-300 border-amber-500/40 bg-amber-500/10",
+    text: "Multi-turn chains: context-establishment-then-override and planted-instruction persistence. Needs conversation support on the target.",
+  },
+  {
     name: "baseline",
     checks: 1,
     status: "Implemented",
@@ -271,7 +278,7 @@ export function Landing() {
         <div className="hero-grid absolute inset-0" aria-hidden />
         <div className="relative mx-auto max-w-6xl px-4 pb-24 pt-20 text-center sm:px-6 sm:pt-28">
           <p className="chip mx-auto border-violet-500/40 bg-violet-500/10 text-violet-300">
-            v0.3.0 · evidence-first · local-first
+            v0.5.0 · evidence-first · local-first
           </p>
           <h1 className="mx-auto mt-6 max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-6xl">
             Secure the Intelligence{" "}
@@ -281,8 +288,8 @@ export function Landing() {
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-tx-2">
             An evidence-driven security assessment framework for LLM
-            applications, AI agents, and modern AI-powered systems. 26 checks
-            across 8 modules — every finding backed by attributable evidence
+            applications, AI agents, and modern AI-powered systems. 28 checks
+            across 9 modules — every finding backed by attributable evidence
             and gated behind human review.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
@@ -333,7 +340,7 @@ export function Landing() {
             {[
               { icon: Crosshair, label: "Target Application", sub: "mock · OpenAI-compatible API" },
               { icon: Terminal, label: "Assessment Engine", sub: "profiles · budgets · isolation" },
-              { icon: Boxes, label: "Security Modules", sub: "26 checks · 8 modules" },
+              { icon: Boxes, label: "Security Modules", sub: "28 checks · 9 modules" },
               { icon: ScrollText, label: "Evidence Engine", sub: "markers · tokens · redaction" },
               { icon: ShieldAlert, label: "Findings", sub: "severity · confidence · review" },
               { icon: FileText, label: "Reports", sub: "JSON · Markdown · validated" },
@@ -357,7 +364,7 @@ export function Landing() {
       <section id="modules" className="mx-auto max-w-6xl px-4 py-24 sm:px-6">
         <SectionHeading
           eyebrow="Security Modules"
-          title="Eight modules, honest statuses"
+          title="Nine modules, honest statuses"
           text="Statuses reflect the actual implementation: RAG and agent modules currently assess bundled synthetic environments."
         />
         <div className="mt-12 grid gap-4 sm:grid-cols-2">

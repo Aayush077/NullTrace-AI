@@ -25,6 +25,8 @@ const MODULE_NOTES: Record<string, string> = {
     "Runs against the bundled synthetic document store. No external RAG adapter exists yet — the framework does not claim to assess one.",
   agent_security:
     "Synthetic agent probes plus OpenAI-format tool-call probing (attempted calls are parsed as evidence, never executed).",
+  attack_chains:
+    "Multi-turn attack chains (context-then-override, persistence-then-trigger). Requires conversation support on the target.",
 };
 
 export function Modules() {

@@ -571,7 +571,7 @@ export function CreateAssessmentModal({
               >
                 <option value="quick">quick — baseline + prompt injection</option>
                 <option value="standard">standard — core modules</option>
-                <option value="full">full — all 8 modules</option>
+                <option value="full">full — 8 modules</option>
               </select>
             </div>
             <div className="flex items-end pb-2">
